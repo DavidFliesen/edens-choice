@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>EDEN - A Procedural Garden (v001)</title>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#000; height:100%; font-family: Georgia, 'Times New Roman', serif; }
+  #c { display:block; width:100%; height:100%; }
+  .overlay { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; }
+
+  #startScreen { position:absolute; left:0; top:0; width:100%; height:100%;
+    background: radial-gradient(ellipse at center, rgba(20,28,16,0.9) 0%, rgba(5,8,4,0.98) 100%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#EAE3C8; z-index:50; cursor:pointer; text-align:center; }
+  #startScreen h1 { font-size:64px; letter-spacing:14px; font-weight:normal; margin:0 0 6px 0; color:#F3E9C6;
+    text-shadow: 0 0 30px rgba(240,220,150,0.45); }
+  #startScreen h2 { font-size:14px; letter-spacing:5px; font-weight:normal; margin:0 0 34px 0; color:#B7C49A; font-style:italic; }
+  #controlsBox { font-size:14px; line-height:1.9; color:#CFC7A6; border-top:1px solid rgba(220,200,140,0.3);
+    border-bottom:1px solid rgba(220,200,140,0.3); padding:16px 30px; letter-spacing:1px; }
+  #controlsBox b { color:#F0E2AC; font-weight:normal; }
+  #enterHint { margin-top:30px; font-size:17px; color:#F0E2AC; letter-spacing:3px; animation: pulse 2.2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:0.45;} 50%{opacity:1;} }
+
+  #prompt { position:absolute; bottom:120px; width:100%; text-align:center; color:#F5EDCB; font-size:18px;
+    letter-spacing:2px; text-shadow:0 2px 8px rgba(0,0,0,0.9); opacity:0; transition:opacity 0.25s; }
+  #prompt span { background:rgba(10,14,8,0.55); padding:8px 20px; border:1px solid rgba(230,210,150,0.4); border-radius:2px; }
+
+  #dialog { position:absolute; bottom:36px; left:50%; transform:translateX(-50%); width:70%; max-width:760px;
+    background:rgba(8,10,6,0.84); border:1px solid rgba(214,190,120,0.55); border-radius:3px;
+    padding:18px 26px 14px 26px; color:#EFE8CE; display:none; box-shadow:0 6px 40px rgba(0,0,0,0.7); z-index:20; }
+  #dialogName { font-size:13px; letter-spacing:4px; color:#E4C878; text-transform:uppercase; margin-bottom:6px; }
+  #dialogText { font-size:19px; line-height:1.55; font-style:italic; }
+  #dialogHint { text-align:right; font-size:12px; color:#9C9478; letter-spacing:2px; margin-top:8px; }
+
+  #povTag { position:absolute; top:16px; right:20px; color:rgba(240,230,190,0.75); font-size:12px; letter-spacing:2px;
+    text-shadow:0 1px 4px #000; z-index:10; }
+  #hint { position:absolute; top:16px; left:20px; color:rgba(240,230,190,0.6); font-size:12px; letter-spacing:1px;
+    text-shadow:0 1px 4px #000; line-height:1.7; z-index:10; }
+
+  #vignette { background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(40,5,5,0.75) 100%);
+    opacity:0; transition: opacity 6s; z-index:5; }
+  #flash { background:#FFFFFF; opacity:0; z-index:6; transition:opacity 0.4s; }
+
+  #endScreen { position:absolute; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0);
+    display:none; flex-direction:column; align-items:center; justify-content:center; z-index:60;
+    color:#E8DFC2; text-align:center; transition: background 4s; }
+  #endVerse { font-size:24px; font-style:italic; line-height:1.7; max-width:640px; opacity:0; transition:opacity 3s; padding:0 24px; }
+  #endRef { font-size:14px; letter-spacing:3px; color:#B8A878; margin-top:18px; opacity:0; transition:opacity 3s; }
+  #restartBtn { margin-top:44px; background:none; border:1px solid rgba(214,190,120,0.6); color:#E8DFC2;
+    font-family:Georgia, serif; font-size:15px; letter-spacing:3px; padding:12px 34px; cursor:pointer; opacity:0;
+    transition:opacity 3s, background 0.3s; pointer-events:auto; }
+  #restartBtn:hover { background:rgba(214,190,120,0.15); }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hint">WASD / Arrows - move &nbsp;&middot;&nbsp; Shift - run &nbsp;&middot;&nbsp; Space - jump<br>
+    Drag - look &nbsp;&middot;&nbsp; I - interact &nbsp;&middot;&nbsp; V - change view</div>
+<div id="povTag">THIRD PERSON</div>
+<div id="prompt"><span id="promptText"></span></div>
+
+<div id="vignette" class="overlay"></div>
+<div id="flash" class="overlay"></div>
+
+<div id="dialog">
+  <div id="dialogName"></div>
+  <div id="dialogText"></div>
+  <div id="dialogHint">I / ENTER &#9656;</div>
+</div>
+
+<div id="startScreen">
+  <h1>EDEN</h1>
+  <h2>a procedural garden &middot; v001 &middot; Cibola Studios</h2>
+  <div id="controlsBox">
+    <b>WASD / Arrow Keys</b> - walk &nbsp;&nbsp; <b>Shift</b> - run &nbsp;&nbsp; <b>Space</b> - jump<br>
+    <b>Drag mouse / finger</b> - look around &nbsp;&nbsp; <b>V</b> - first / third person<br>
+    <b>I</b> - interact, speak, take fruit
+  </div>
+  <div id="enterHint">- CLICK TO ENTER THE GARDEN -</div>
+</div>
+
+<div id="endScreen">
+  <div id="endVerse"></div>
+  <div id="endRef"></div>
+  <button id="restartBtn" onclick="location.reload()">RETURN TO THE BEGINNING</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ============ SEEDED RANDOM AND NOISE ============
+  var SEED = 20260704;
+  function makeRng(seed) {
+    var s = seed >>> 0;
+    return function () {
+      s = (s + 0x6D2B79F5) >>> 0;
+      var t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  var rng = makeRng(SEED);
+
+  function hash2(x, z) {
+    var n = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
+    return n - Math.floor(n);
+  }
+  function smooth(t) { return t * t * (3 - 2 * t); }
+  function noise2(x, z) {
+    var xi = Math.floor(x), zi = Math.floor(z);
+    var xf = x - xi, zf = z - zi;
+    var a = hash2(xi, zi), b = hash2(xi + 1, zi);
+    var c = hash2(xi, zi + 1), d = hash2(xi + 1, zi + 1);
+    var u = smooth(xf), v = smooth(zf);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  }
+  function fbm(x, z) {
+    return noise2(x, z) * 0.55 + noise2(x * 2.1, z * 2.1) * 0.28 + noise2(x * 4.3, z * 4.3) * 0.17;
+  }
+
+  // ============ WORLD LAYOUT ============
+  var LIFE_POS = { x: -26, z: -8 };
+  var KNOW_POS = { x: 26, z: -8 };
+  var SPAWN = { x: 0, z: 34 };
+  var WATER_Y = -1.6;
+
+  function riverX(z) { return 62 + Math.sin(z * 0.045) * 14; }
+
+  function flatten(h, x, z, cx, cz, r, target) {
+    var dx = x - cx, dz = z - cz;
+    var d = Math.sqrt(dx * dx + dz * dz);
+    if (d >= r) return h;
+    var t = smooth(1 - d / r);
+    return h + (target - h) * t;
+  }
+
+  function getHeight(x, z) {
+    var h = (fbm(x * 0.02 + 40, z * 0.02 + 40) - 0.45) * 9;
+    h += (fbm(x * 0.09, z * 0.09) - 0.5) * 1.6;
+    var d = Math.abs(x - riverX(z));
+    if (d < 12) {
+      var t = smooth(1 - d / 12);
+      h -= t * t * 6.5;
+    }
+    h = flatten(h, x, z, LIFE_POS.x, LIFE_POS.z, 14, 0.6);
+    h = flatten(h, x, z, KNOW_POS.x, KNOW_POS.z, 14, 0.6);
+    h = flatten(h, x, z, SPAWN.x, SPAWN.z, 12, 0.4);
+    return h;
+  }
+
+  // ============ STATE ============
+  var state = {
+    started: false, fallen: false, pov: 3,
+    mode: 'roam',
+    fallT: 0, fallActive: false,
+    godPhase: 0, godTimer: 0,
+    lightningTimer: 6,
+    snakeIntroDone: false,
+    fallSource: ''
+  };
+  var keys = {};
+  var yaw = Math.PI, pitch = -0.06;
+
+  // ============ RENDERER / SCENE / CAMERA ============
+  var canvas = document.getElementById('c');
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  var scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0xC9E4EE, 70, 300);
+
+  var camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 900);
+
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ============ SKY DOME ============
+  var skyCanvas = document.createElement('canvas');
+  skyCanvas.width = 64; skyCanvas.height = 256;
+  var skyCtx = skyCanvas.getContext('2d');
+  var skyTex = new THREE.CanvasTexture(skyCanvas);
+
+  function lerpN(a, b, t) { return a + (b - a) * t; }
+  function mixHex(h1, h2, t) {
+    var r = Math.round(lerpN((h1 >> 16) & 255, (h2 >> 16) & 255, t));
+    var g = Math.round(lerpN((h1 >> 8) & 255, (h2 >> 8) & 255, t));
+    var b = Math.round(lerpN(h1 & 255, h2 & 255, t));
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+  function drawSky(t) {
+    var g = skyCtx.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0.0, mixHex(0x5FB0E6, 0x131120, t));
+    g.addColorStop(0.45, mixHex(0xA8D8F0, 0x323040, t));
+    g.addColorStop(0.72, mixHex(0xE8EFD8, 0x4A3232, t));
+    g.addColorStop(1.0, mixHex(0xFFE9BC, 0x571F1A, t));
+    skyCtx.fillStyle = g;
+    skyCtx.fillRect(0, 0, 64, 256);
+    skyTex.needsUpdate = true;
+  }
+  drawSky(0);
+  var skyDome = new THREE.Mesh(
+    new THREE.SphereGeometry(430, 24, 14),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false, depthWrite: false })
+  );
+  scene.add(skyDome);
+
+  // ============ LIGHTS ============
+  var hemi = new THREE.HemisphereLight(0xEAF4FF, 0x4A6B3A, 0.85);
+  scene.add(hemi);
+  var sun = new THREE.DirectionalLight(0xFFF4D6, 1.15);
+  sun.position.set(-60, 90, 40);
+  sun.castShadow = true;
+  sun.shadow.mapSize.width = 2048; sun.shadow.mapSize.height = 2048;
+  sun.shadow.camera.left = -120; sun.shadow.camera.right = 120;
+  sun.shadow.camera.top = 120; sun.shadow.camera.bottom = -120;
+  sun.shadow.camera.far = 300;
+  sun.shadow.bias = -0.0008;
+  scene.add(sun);
+
+  var sunMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(16, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xFFF3C0, fog: false })
+  );
+  sunMesh.position.set(-230, 280, 160);
+  scene.add(sunMesh);
+
+  // ============ TERRAIN ============
+  var TSIZE = 260, TSEG = 110;
+  var terrGeo = new THREE.PlaneGeometry(TSIZE, TSIZE, TSEG, TSEG);
+  terrGeo.rotateX(-Math.PI / 2);
+  var tpos = terrGeo.attributes.position;
+  var tcolors = [];
+  var ci;
+  for (ci = 0; ci < tpos.count; ci++) {
+    var vx = tpos.getX(ci), vz = tpos.getZ(ci);
+    var vy = getHeight(vx, vz);
+    tpos.setY(ci, vy);
+    var n = fbm(vx * 0.11 + 9, vz * 0.11 + 9);
+    var r0, g0, b0;
+    if (vy < WATER_Y + 0.5) { r0 = 0.72; g0 = 0.64; b0 = 0.42; }
+    else if (n > 0.62) { r0 = 0.32; g0 = 0.55; b0 = 0.25; }
+    else if (n < 0.4) { r0 = 0.16; g0 = 0.35; b0 = 0.15; }
+    else { r0 = 0.23; g0 = 0.46; b0 = 0.20; }
+    tcolors.push(r0, g0, b0);
+  }
+  terrGeo.setAttribute('color', new THREE.Float32BufferAttribute(tcolors, 3));
+  terrGeo.computeVertexNormals();
+  var terrMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  var terrain = new THREE.Mesh(terrGeo, terrMat);
+  terrain.receiveShadow = true;
+  scene.add(terrain);
+
+  // ============ WATER ============
+  var waterMat = new THREE.MeshPhongMaterial({
+    color: 0x3E90B8, transparent: true, opacity: 0.72, shininess: 120, specular: 0xBBDDEE
+  });
+  var water = new THREE.Mesh(new THREE.PlaneGeometry(TSIZE, TSIZE), waterMat);
+  water.rotation.x = -Math.PI / 2;
+  water.position.y = WATER_Y;
+  scene.add(water);
+
+  // ============ INSTANCED FOREST ============
+  var dummy = new THREE.Object3D();
+  var treeColliders = [];
+
+  function goodSpot(x, z, minC) {
+    var dl = Math.sqrt((x - LIFE_POS.x) * (x - LIFE_POS.x) + (z - LIFE_POS.z) * (z - LIFE_POS.z));
+    var dk = Math.sqrt((x - KNOW_POS.x) * (x - KNOW_POS.x) + (z - KNOW_POS.z) * (z - KNOW_POS.z));
+    var ds = Math.sqrt((x - SPAWN.x) * (x - SPAWN.x) + (z - SPAWN.z) * (z - SPAWN.z));
+    if (dl < minC || dk < minC || ds < minC) return false;
+    if (Math.abs(x - riverX(z)) < 11) return false;
+    return true;
+  }
+
+  var trunkMat = new THREE.MeshLambertMaterial({ color: 0x6B4A2E });
+  var leafMats = [
+    new THREE.MeshLambertMaterial({ color: 0x3F7F38 }),
+    new THREE.MeshLambertMaterial({ color: 0x549A46 }),
+    new THREE.MeshLambertMaterial({ color: 0x6DB258 })
+  ];
+  var NTREE = 190;
+  var trunkInst = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.42, 3.2, 6), trunkMat, NTREE);
+  trunkInst.castShadow = true;
+  var blobGeo = new THREE.SphereGeometry(1.55, 8, 6);
+  var blobCap = 260;
+  var blobInst = [
+    new THREE.InstancedMesh(blobGeo, leafMats[0], blobCap),
+    new THREE.InstancedMesh(blobGeo, leafMats[1], blobCap),
+    new THREE.InstancedMesh(blobGeo, leafMats[2], blobCap)
+  ];
+  blobInst[0].castShadow = true; blobInst[1].castShadow = true; blobInst[2].castShadow = true;
+  var trunkCount = 0, blobCount = [0, 0, 0];
+
+  function placeTree(x, z, s) {
+    if (trunkCount >= NTREE) return;
+    var y = getHeight(x, z);
+    dummy.position.set(x, y + 1.6 * s, z);
+    dummy.rotation.set(0, rng() * 6.28, 0);
+    dummy.scale.set(s, s, s);
+    dummy.updateMatrix();
+    trunkInst.setMatrixAt(trunkCount, dummy.matrix);
+    trunkCount++;
+    treeColliders.push({ x: x, z: z, r: 0.55 * s + 0.3 });
+    var nb = 2 + Math.floor(rng() * 2), bi;
+    for (bi = 0; bi < nb; bi++) {
+      var grp = Math.floor(rng() * 3);
+      if (blobCount[grp] >= blobCap) continue;
+      dummy.position.set(x + (rng() - 0.5) * 1.6 * s, y + (2.9 + rng() * 1.4) * s, z + (rng() - 0.5) * 1.6 * s);
+      var bs = (0.8 + rng() * 0.7) * s;
+      dummy.scale.set(bs, bs * 0.85, bs);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      blobInst[grp].setMatrixAt(blobCount[grp], dummy.matrix);
+      blobCount[grp]++;
+    }
+  }
+
+  var ti = 0, guard = 0;
+  while (ti < 100 && guard < 4000) {
+    guard++;
+    var tx = (rng() - 0.5) * 190, tz = (rng() - 0.5) * 190;
+    if (!goodSpot(tx, tz, 15)) continue;
+    placeTree(tx, tz, 0.8 + rng() * 0.9);
+    ti++;
+  }
+  for (ti = 0; ti < 80; ti++) {
+    var ang = (ti / 80) * Math.PI * 2 + rng() * 0.07;
+    var rr = 98 + rng() * 14;
+    placeTree(Math.cos(ang) * rr, Math.sin(ang) * rr, 1.2 + rng() * 0.8);
+  }
+  trunkInst.instanceMatrix.needsUpdate = true;
+  scene.add(trunkInst);
+  var bi2;
+  for (bi2 = 0; bi2 < 3; bi2++) { blobInst[bi2].instanceMatrix.needsUpdate = true; scene.add(blobInst[bi2]); }
+
+  // ============ ROCKS ============
+  var rockInst = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.8, 0),
+    new THREE.MeshLambertMaterial({ color: 0x8A857A }), 34);
+  var rc = 0; guard = 0;
+  while (rc < 34 && guard < 2000) {
+    guard++;
+    var rx = (rng() - 0.5) * 180, rz2 = (rng() - 0.5) * 180;
+    if (!goodSpot(rx, rz2, 10)) continue;
+    dummy.position.set(rx, getHeight(rx, rz2) + 0.25, rz2);
+    var rs = 0.4 + rng() * 1.3;
+    dummy.scale.set(rs, rs * 0.7, rs);
+    dummy.rotation.set(rng(), rng() * 6.28, rng());
+    dummy.updateMatrix();
+    rockInst.setMatrixAt(rc, dummy.matrix);
+    rc++;
+  }
+  rockInst.castShadow = true; rockInst.receiveShadow = true;
+  scene.add(rockInst);
+
+  // ============ FLOWERS ============
+  var NFLO = 300;
+  var stemInst = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.02, 0.03, 0.4, 4),
+    new THREE.MeshLambertMaterial({ color: 0x3F7A32 }), NFLO);
+  var bloomGeo = new THREE.SphereGeometry(0.1, 6, 5);
+  var bloomInst = [
+    new THREE.InstancedMesh(bloomGeo, new THREE.MeshLambertMaterial({ color: 0xE86FA0, emissive: 0x331021 }), 120),
+    new THREE.InstancedMesh(bloomGeo, new THREE.MeshLambertMaterial({ color: 0xF2D24C, emissive: 0x332B0A }), 120),
+    new THREE.InstancedMesh(bloomGeo, new THREE.MeshLambertMaterial({ color: 0xF5F1E0, emissive: 0x2A2A22 }), 120)
+  ];
+  var fc = 0, fCount = [0, 0, 0]; guard = 0;
+  while (fc < NFLO && guard < 4000) {
+    guard++;
+    var fx = (rng() - 0.5) * 170, fz = (rng() - 0.5) * 170;
+    if (Math.abs(fx - riverX(fz)) < 10) continue;
+    var fy = getHeight(fx, fz);
+    if (fy < WATER_Y + 0.4) continue;
+    dummy.position.set(fx, fy + 0.2, fz);
+    dummy.scale.set(1, 1, 1); dummy.rotation.set(0, 0, 0);
+    dummy.updateMatrix();
+    stemInst.setMatrixAt(fc, dummy.matrix);
+    var grp2 = Math.floor(rng() * 3);
+    if (fCount[grp2] < 120) {
+      dummy.position.set(fx, fy + 0.42, fz);
+      dummy.updateMatrix();
+      bloomInst[grp2].setMatrixAt(fCount[grp2], dummy.matrix);
+      fCount[grp2]++;
+    }
+    fc++;
+  }
+  scene.add(stemInst);
+  scene.add(bloomInst[0]); scene.add(bloomInst[1]); scene.add(bloomInst[2]);
+
+  // ============ GRAND TREES ============
+  function buildGrandTree(px, pz, cfg) {
+    var g = new THREE.Group();
+    var y0 = getHeight(px, pz);
+    g.position.set(px, y0, pz);
+    var trunk = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 2.1, 9, 10),
+      new THREE.MeshLambertMaterial({ color: cfg.trunk }));
+    trunk.position.y = 4.5; trunk.castShadow = true;
+    g.add(trunk);
+    var k;
+    for (k = 0; k < 5; k++) {
+      var root = new THREE.Mesh(new THREE.ConeGeometry(0.7, 2.4, 5),
+        new THREE.MeshLambertMaterial({ color: cfg.trunk }));
+      var ra = (k / 5) * Math.PI * 2;
+      root.position.set(Math.cos(ra) * 1.9, 0.7, Math.sin(ra) * 1.9);
+      root.rotation.z = Math.cos(ra) * 0.6;
+      root.rotation.x = -Math.sin(ra) * 0.6;
+      g.add(root);
+    }
+    var leafMat = new THREE.MeshLambertMaterial({ color: cfg.leaf, emissive: cfg.leafGlow });
+    for (k = 0; k < 9; k++) {
+      var blob = new THREE.Mesh(new THREE.SphereGeometry(2.6 + rng() * 1.8, 9, 7), leafMat);
+      var ba = rng() * Math.PI * 2, br = rng() * 3.4;
+      blob.position.set(Math.cos(ba) * br, 9.5 + rng() * 3.2, Math.sin(ba) * br);
+      blob.castShadow = true;
+      g.add(blob);
+    }
+    var fruitMat = new THREE.MeshPhongMaterial({ color: cfg.fruit, emissive: cfg.fruitGlow, shininess: 90 });
+    g.userData.fruits = [];
+    for (k = 0; k < cfg.nFruit; k++) {
+      var fr = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 7), fruitMat);
+      var fa = (k / cfg.nFruit) * Math.PI * 2 + rng();
+      var frr = 2.6 + rng() * 2.6;
+      var fh = (k % 3 === 0) ? (2.2 + rng() * 1.2) : (6.5 + rng() * 3.5);
+      fr.position.set(Math.cos(fa) * frr, fh, Math.sin(fa) * frr);
+      g.add(fr);
+      g.userData.fruits.push(fr);
+    }
+    if (cfg.light) {
+      var pl = new THREE.PointLight(cfg.light, cfg.lightI, 34);
+      pl.position.y = 8;
+      g.add(pl);
+      g.userData.light = pl;
+    }
+    scene.add(g);
+    treeColliders.push({ x: px, z: pz, r: 2.4 });
+    return g;
+  }
+
+  var treeLife = buildGrandTree(LIFE_POS.x, LIFE_POS.z, {
+    trunk: 0x8A6A3C, leaf: 0xA8D87A, leafGlow: 0x2E3A12,
+    fruit: 0xF2CE6A, fruitGlow: 0x6B5210, nFruit: 14,
+    light: 0xFFE9A8, lightI: 1.1
+  });
+  var treeKnow = buildGrandTree(KNOW_POS.x, KNOW_POS.z, {
+    trunk: 0x4A3528, leaf: 0x2E5A38, leafGlow: 0x101822,
+    fruit: 0xC22B22, fruitGlow: 0x3A0505, nFruit: 14,
+    light: 0x7A4FA8, lightI: 0.45
+  });
+
+  // golden motes rising at the Tree of Life
+  var moteGeo = new THREE.BufferGeometry();
+  var motePos = new Float32Array(80 * 3);
+  var mi;
+  for (mi = 0; mi < 80; mi++) {
+    motePos[mi * 3] = LIFE_POS.x + (rng() - 0.5) * 12;
+    motePos[mi * 3 + 1] = getHeight(LIFE_POS.x, LIFE_POS.z) + rng() * 14;
+    motePos[mi * 3 + 2] = LIFE_POS.z + (rng() - 0.5) * 12;
+  }
+  moteGeo.setAttribute('position', new THREE.BufferAttribute(motePos, 3));
+  var motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({
+    color: 0xFFE9A0, size: 0.18, transparent: true, opacity: 0.85
+  }));
+  scene.add(motes);
+
+  // ============ SERPENT (coiled at the Tree of Knowledge) ============
+  var snake = new THREE.Group();
+  var snakeMat = new THREE.MeshPhongMaterial({ color: 0x6A8F2A, emissive: 0x141B04, shininess: 60 });
+  var snakeSegs = [];
+  var si;
+  for (si = 0; si < 16; si++) {
+    var srad = 0.34 - si * 0.014;
+    var seg = new THREE.Mesh(new THREE.SphereGeometry(srad, 8, 7), snakeMat);
+    snake.add(seg);
+    snakeSegs.push(seg);
+  }
+  var snakeHead = new THREE.Mesh(new THREE.SphereGeometry(0.38, 9, 8), snakeMat);
+  snakeHead.scale.set(1.15, 0.85, 1.3);
+  snake.add(snakeHead);
+  var eyeMat = new THREE.MeshBasicMaterial({ color: 0xE8B93A });
+  var eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), eyeMat);
+  var eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), eyeMat);
+  snakeHead.add(eyeL); snakeHead.add(eyeR);
+  eyeL.position.set(-0.14, 0.14, 0.3); eyeR.position.set(0.14, 0.14, 0.3);
+  var snakeBaseY = getHeight(KNOW_POS.x, KNOW_POS.z);
+  snake.position.set(KNOW_POS.x + 3.1, snakeBaseY, KNOW_POS.z + 2.4);
+  scene.add(snake);
+
+  function animSnake(time) {
+    var i;
+    for (i = 0; i < snakeSegs.length; i++) {
+      var a = i * 0.55 + time * 1.4;
+      var r = 1.15 - i * 0.05;
+      snakeSegs[i].position.set(
+        Math.cos(a) * r,
+        0.28 + i * 0.028 + Math.sin(time * 2 + i * 0.6) * 0.035,
+        Math.sin(a) * r
+      );
+    }
+    var ha = snakeSegs.length * 0.55 + time * 1.4;
+    snakeHead.position.set(Math.cos(ha) * 0.4, 0.85 + Math.sin(time * 1.3) * 0.08, Math.sin(ha) * 0.4);
+    snakeHead.lookAt(player.position.x, snake.position.y + 1.2, player.position.z);
+  }
+
+  // ============ HUMAN FIGURES ============
+  function buildHuman(skin, hairColor, longHair) {
+    var g = new THREE.Group();
+    var skinMat = new THREE.MeshLambertMaterial({ color: skin });
+    var hairMat = new THREE.MeshLambertMaterial({ color: hairColor });
+    var leafSkirtMat = new THREE.MeshLambertMaterial({ color: 0x3E7A2E });
+
+    var torso = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.19, 0.72, 8), skinMat);
+    torso.position.y = 1.12; torso.castShadow = true; g.add(torso);
+
+    var head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 10, 9), skinMat);
+    head.position.y = 1.66; head.castShadow = true; g.add(head);
+
+    var hair = new THREE.Mesh(new THREE.SphereGeometry(0.165, 10, 9), hairMat);
+    hair.position.set(0, 1.7, -0.03);
+    hair.scale.set(1, 0.9, 1);
+    g.add(hair);
+    if (longHair) {
+      var mane = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.06, 0.55, 7), hairMat);
+      mane.position.set(0, 1.42, -0.12);
+      g.add(mane);
+    }
+
+    var skirt = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.34, 9), leafSkirtMat);
+    skirt.position.y = 0.72;
+    g.add(skirt);
+
+    var limbs = {};
+    function limb(rTop, rBot, len, x, y, name) {
+      var pivot = new THREE.Group();
+      pivot.position.set(x, y, 0);
+      var m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, len, 6), skinMat);
+      m.position.y = -len / 2;
+      m.castShadow = true;
+      pivot.add(m);
+      g.add(pivot);
+      limbs[name] = pivot;
+    }
+    limb(0.06, 0.05, 0.62, -0.22, 1.42, 'armL');
+    limb(0.06, 0.05, 0.62, 0.22, 1.42, 'armR');
+    limb(0.085, 0.07, 0.62, -0.1, 0.62, 'legL');
+    limb(0.085, 0.07, 0.62, 0.1, 0.62, 'legR');
+
+    g.userData.limbs = limbs;
+    g.userData.walkPhase = 0;
+    return g;
+  }
+
+  function animHuman(h, speed, dt) {
+    h.userData.walkPhase += dt * speed * 5.2;
+    var p = h.userData.walkPhase;
+    var amp = Math.min(speed / 4, 1) * 0.7;
+    var L = h.userData.limbs;
+    L.armL.rotation.x = Math.sin(p) * amp;
+    L.armR.rotation.x = -Math.sin(p) * amp;
+    L.legL.rotation.x = -Math.sin(p) * amp;
+    L.legR.rotation.x = Math.sin(p) * amp;
+  }
+
+  // Adam (player)
+  var player = buildHuman(0xC68A62, 0x3A2A1A, false);
+  player.position.set(SPAWN.x, getHeight(SPAWN.x, SPAWN.z), SPAWN.z);
+  scene.add(player);
+  var pvel = new THREE.Vector3();
+  var onGround = true;
+
+  // Eve (NPC)
+  var eve = buildHuman(0xD69C78, 0x5A3A1E, true);
+  var evePos = { x: LIFE_POS.x + 7, z: LIFE_POS.z + 6 };
+  eve.position.set(evePos.x, getHeight(evePos.x, evePos.z), evePos.z);
+  scene.add(eve);
+  var eveTarget = { x: evePos.x, z: evePos.z };
+  var eveWait = 2;
+
+  // ============ BUTTERFLIES ============
+  var butterflies = [];
+  var bfi;
+  for (bfi = 0; bfi < 12; bfi++) {
+    var bg = new THREE.Group();
+    var wcol = [0xF2A03C, 0x7EC8E8, 0xF2E85C, 0xE87AB0][bfi % 4];
+    var wingMat = new THREE.MeshBasicMaterial({ color: wcol, side: THREE.DoubleSide });
+    var wL = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.16), wingMat);
+    var wR = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.16), wingMat);
+    wL.position.x = -0.11; wR.position.x = 0.11;
+    bg.add(wL); bg.add(wR);
+    var bx = (rng() - 0.5) * 90, bz = (rng() - 0.5) * 90;
+    bg.position.set(bx, getHeight(bx, bz) + 1.5 + rng() * 2, bz);
+    scene.add(bg);
+    butterflies.push({ g: bg, wL: wL, wR: wR, t: rng() * 10, a: rng() * 6.28 });
+  }
+
+  // ============ RAIN ============
+  var RAINN = 1400;
+  var rainGeo = new THREE.BufferGeometry();
+  var rainPos = new Float32Array(RAINN * 3);
+  var ri;
+  for (ri = 0; ri < RAINN; ri++) {
+    rainPos[ri * 3] = (rng() - 0.5) * 90;
+    rainPos[ri * 3 + 1] = rng() * 40;
+    rainPos[ri * 3 + 2] = (rng() - 0.5) * 90;
+  }
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+  var rain = new THREE.Points(rainGeo, new THREE.PointsMaterial({
+    color: 0x9FB6C8, size: 0.14, transparent: true, opacity: 0.7
+  }));
+  rain.visible = false;
+  scene.add(rain);
+
+  // ============ GOD FIGURE ============
+  var god = new THREE.Group();
+  var radiantMat = new THREE.MeshBasicMaterial({ color: 0xFFF6DC });
+  var robe = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 4.2, 13, 12), radiantMat);
+  robe.position.y = 6.5; god.add(robe);
+  var godHead = new THREE.Mesh(new THREE.SphereGeometry(1.5, 14, 12), radiantMat);
+  godHead.position.y = 14.4; god.add(godHead);
+  var halo = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.16, 8, 40),
+    new THREE.MeshBasicMaterial({ color: 0xFFD873 }));
+  halo.position.y = 14.4; god.add(halo);
+  var godLight = new THREE.PointLight(0xFFEFC2, 0, 160);
+  godLight.position.y = 10; god.add(godLight);
+  var beam = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 8, 120, 16, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xFFF3CC, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }));
+  beam.position.y = 60; god.add(beam);
+  var auraGeo = new THREE.BufferGeometry();
+  var auraPos = new Float32Array(110 * 3);
+  var ai;
+  for (ai = 0; ai < 110; ai++) {
+    var aa = rng() * 6.28, ar = 2 + rng() * 4;
+    auraPos[ai * 3] = Math.cos(aa) * ar;
+    auraPos[ai * 3 + 1] = rng() * 16;
+    auraPos[ai * 3 + 2] = Math.sin(aa) * ar;
+  }
+  auraGeo.setAttribute('position', new THREE.BufferAttribute(auraPos, 3));
+  var aura = new THREE.Points(auraGeo, new THREE.PointsMaterial({
+    color: 0xFFE9A8, size: 0.3, transparent: true, opacity: 0.9
+  }));
+  god.add(aura);
+  god.visible = false;
+  scene.add(god);
+
+  // ============ AUDIO (procedural, Web Audio) ============
+  var AC = null, master = null;
+  var peacefulTimers = [], ominousTimers = [];
+  var noiseBuf = null;
+
+  function ensureAudio() {
+    if (AC) return;
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    AC = new Ctx();
+    master = AC.createGain();
+    master.gain.value = 0.55;
+    master.connect(AC.destination);
+    var len = AC.sampleRate * 2;
+    noiseBuf = AC.createBuffer(1, len, AC.sampleRate);
+    var data = noiseBuf.getChannelData(0);
+    var i;
+    for (i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    startPeaceful();
+  }
+
+  function tone(freq, dur, vol, type, filterFreq) {
+    if (!AC) return;
+    var o = AC.createOscillator();
+    o.type = type || 'sine';
+    o.frequency.value = freq;
+    var g = AC.createGain();
+    g.gain.setValueAtTime(0, AC.currentTime);
+    g.gain.linearRampToValueAtTime(vol, AC.currentTime + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
+    if (filterFreq) {
+      var f = AC.createBiquadFilter();
+      f.type = 'lowpass'; f.frequency.value = filterFreq;
+      o.connect(f); f.connect(g);
+    } else {
+      o.connect(g);
+    }
+    g.connect(master);
+    o.start();
+    o.stop(AC.currentTime + dur + 0.1);
+  }
+
+  function playPad(freqs, dur, vol) {
+    if (!AC) return;
+    var i;
+    for (i = 0; i < freqs.length; i++) {
+      var o = AC.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = freqs[i];
+      o.detune.value = (i % 2 === 0) ? 4 : -4;
+      var g = AC.createGain();
+      g.gain.setValueAtTime(0, AC.currentTime);
+      g.gain.linearRampToValueAtTime(vol, AC.currentTime + 2.2);
+      g.gain.setValueAtTime(vol, AC.currentTime + dur - 2.2);
+      g.gain.linearRampToValueAtTime(0, AC.currentTime + dur);
+      var f = AC.createBiquadFilter();
+      f.type = 'lowpass'; f.frequency.value = 900;
+      o.connect(f); f.connect(g); g.connect(master);
+      o.start();
+      o.stop(AC.currentTime + dur + 0.2);
+    }
+  }
+
+  var PENTA = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25];
+  var CHORDS = [
+    [130.81, 196.0, 329.63],
+    [110.0, 164.81, 261.63],
+    [87.31, 174.61, 261.63],
+    [98.0, 196.0, 293.66]
+  ];
+  var chordIdx = 0;
+
+  function startPeaceful() {
+    if (!AC) return;
+    playPad(CHORDS[0], 8.5, 0.045);
+    peacefulTimers.push(setInterval(function () {
+      chordIdx = (chordIdx + 1) % CHORDS.length;
+      playPad(CHORDS[chordIdx], 8.5, 0.045);
+    }, 8000));
+    peacefulTimers.push(setInterval(function () {
+      if (Math.random() < 0.85) {
+        tone(PENTA[Math.floor(Math.random() * PENTA.length)], 1.6, 0.05, 'sine');
+      }
+    }, 1500));
+    peacefulTimers.push(setInterval(function () { // birdsong
+      if (Math.random() < 0.6) {
+        var f0 = 1900 + Math.random() * 900;
+        tone(f0, 0.14, 0.025, 'sine');
+        setTimeout(function () { tone(f0 * 0.82, 0.12, 0.02, 'sine'); }, 160);
+      }
+    }, 3800));
+  }
+
+  function stopPeaceful() {
+    var i;
+    for (i = 0; i < peacefulTimers.length; i++) clearInterval(peacefulTimers[i]);
+    peacefulTimers = [];
+  }
+
+  function startOminous() {
+    if (!AC) return;
+    // sustained tritone drone
+    var freqs = [55, 77.78], i;
+    for (i = 0; i < freqs.length; i++) {
+      var o = AC.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = freqs[i];
+      var g = AC.createGain();
+      g.gain.setValueAtTime(0, AC.currentTime);
+      g.gain.linearRampToValueAtTime(0.05, AC.currentTime + 5);
+      var f = AC.createBiquadFilter();
+      f.type = 'lowpass'; f.frequency.value = 280;
+      o.connect(f); f.connect(g); g.connect(master);
+      o.start();
+    }
+    // cold wind
+    var wsrc = AC.createBufferSource();
+    wsrc.buffer = noiseBuf; wsrc.loop = true;
+    var wf = AC.createBiquadFilter();
+    wf.type = 'bandpass'; wf.frequency.value = 420; wf.Q.value = 0.7;
+    var wg = AC.createGain();
+    wg.gain.setValueAtTime(0, AC.currentTime);
+    wg.gain.linearRampToValueAtTime(0.05, AC.currentTime + 6);
+    wsrc.connect(wf); wf.connect(wg); wg.connect(master);
+    wsrc.start();
+    // slow funereal pulse
+    ominousTimers.push(setInterval(function () {
+      tone(58, 2.4, 0.09, 'sine');
+      tone(61.7, 2.4, 0.05, 'sine');
+    }, 4200));
+  }
+
+  function thunder(delay) {
+    if (!AC) return;
+    setTimeout(function () {
+      var src = AC.createBufferSource();
+      src.buffer = noiseBuf;
+      var f = AC.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.setValueAtTime(400, AC.currentTime);
+      f.frequency.exponentialRampToValueAtTime(60, AC.currentTime + 1.6);
+      var g = AC.createGain();
+      g.gain.setValueAtTime(0.5, AC.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 2.0);
+      src.connect(f); f.connect(g); g.connect(master);
+      src.start();
+      src.stop(AC.currentTime + 2.2);
+      tone(42, 1.4, 0.2, 'sine');
+    }, delay);
+  }
+
+  function chime() {
+    tone(880, 0.9, 0.05, 'sine');
+    setTimeout(function () { tone(1174.7, 1.1, 0.045, 'sine'); }, 120);
+  }
+
+  function godChord() {
+    playPad([65.41, 98.0, 130.81, 196.0, 261.63], 10, 0.05);
+  }
+
+  // ============ UI HELPERS ============
+  var el = {
+    prompt: document.getElementById('prompt'),
+    promptText: document.getElementById('promptText'),
+    dialog: document.getElementById('dialog'),
+    dialogName: document.getElementById('dialogName'),
+    dialogText: document.getElementById('dialogText'),
+    dialogHint: document.getElementById('dialogHint'),
+    povTag: document.getElementById('povTag'),
+    vignette: document.getElementById('vignette'),
+    flash: document.getElementById('flash'),
+    start: document.getElementById('startScreen'),
+    endScreen: document.getElementById('endScreen'),
+    endVerse: document.getElementById('endVerse'),
+    endRef: document.getElementById('endRef'),
+    restartBtn: document.getElementById('restartBtn')
+  };
+
+  var dlg = { lines: [], idx: 0, name: '', onDone: null };
+
+  function showDialog(name, lines, onDone, hint) {
+    dlg.lines = lines; dlg.idx = 0; dlg.name = name; dlg.onDone = onDone || null;
+    state.mode = (hint === 'choice') ? 'choice' : 'dialog';
+    el.dialogName.textContent = name;
+    el.dialogText.textContent = lines[0];
+    el.dialogHint.innerHTML = (hint === 'choice' && lines.length === 1) ? 'Y - EAT THE FRUIT &nbsp;&middot;&nbsp; N - TURN AWAY' : 'I / ENTER &#9656;';
+    el.dialog.style.display = 'block';
+    el.prompt.style.opacity = 0;
+  }
+
+  function advanceDialog() {
+    dlg.idx++;
+    if (dlg.idx >= dlg.lines.length) {
+      el.dialog.style.display = 'none';
+      var cb = dlg.onDone;
+      dlg.onDone = null;
+      if (state.mode === 'dialog') state.mode = 'roam';
+      if (cb) cb();
+    } else {
+      el.dialogText.textContent = dlg.lines[dlg.idx];
+      if (state.mode === 'choice' && dlg.idx === dlg.lines.length - 1) {
+        el.dialogHint.innerHTML = 'Y - EAT THE FRUIT &nbsp;&middot;&nbsp; N - TURN AWAY';
+      }
+    }
+  }
+
+  // ============ DIALOG CONTENT ============
+  var LINES = {
+    snakeIntro: ['Ssssso... the man walks alone among the trees.'],
+    snakeTalk: [
+      'Yea, hath God said, ye shall not eat of every tree of the garden?',
+      'Ye shall not surely die.',
+      'For God doth know that in the day ye eat thereof, then your eyes shall be opened...',
+      '...and ye shall be as gods, knowing good and evil. Take. Eat. Sssee.'
+    ],
+    evePeace: [
+      'Is it not beautiful, Adam? Every tree pleasant to the sight, and good for food.',
+      'The serpent lingers by the dark tree. His words are sweet... too sweet.',
+      'Remember what the LORD said of that tree: in the day thou eatest thereof, thou shalt surely die.'
+    ],
+    eveFallen: [
+      'Adam... what have we done? The light has gone out of the leaves.',
+      'I am afraid. He is coming.'
+    ],
+    knowWarn: [
+      'This is the Tree of the Knowledge of Good and Evil.',
+      'Of this tree the LORD God commanded: thou shalt not eat of it - for in the day that thou eatest thereof thou shalt surely die.'
+    ],
+    lifeWarn: [
+      'This is the Tree of Life, in the midst of the garden. Its fruit shines like morning.',
+      'Whoso eateth of it would live for ever.'
+    ],
+    takeKnow: [
+      'The fruit hangs low. It is pleasant to the eyes, and a tree to be desired to make one wise.',
+      'The serpent\'s whisper coils in your ear: ye shall not surely die...'
+    ],
+    takeLife: [
+      'The golden fruit hums with warmth, heavy with everlasting life.',
+      'It was not given to you to take. And yet your hand reaches...'
+    ],
+    berry: ['You eat freely of the garden, and it is good.'],
+    river: ['A river went out of Eden to water the garden. The water is cold and clean.'],
+    godKnow: [
+      'ADAM. WHERE ART THOU?',
+      'HAST THOU EATEN OF THE TREE, WHEREOF I COMMANDED THEE THAT THOU SHOULDEST NOT EAT?',
+      'CURSED IS THE GROUND FOR THY SAKE; IN SORROW SHALT THOU EAT OF IT ALL THE DAYS OF THY LIFE.',
+      'IN THE SWEAT OF THY FACE SHALT THOU EAT BREAD, TILL THOU RETURN UNTO THE GROUND.',
+      'FOR DUST THOU ART, AND UNTO DUST SHALT THOU RETURN.'
+    ],
+    godLife: [
+      'ADAM. WHERE ART THOU?',
+      'BEHOLD, THE MAN PUTTETH FORTH HIS HAND TO TAKE OF THE TREE OF LIFE, TO EAT, AND LIVE FOR EVER.',
+      'IT WAS NOT GIVEN THEE TO TAKE. THE GARDEN IS CLOSED TO THEE.',
+      'FOR DUST THOU ART, AND UNTO DUST SHALT THOU RETURN.'
+    ]
+  };
+
+  // ============ INTERACTABLES ============
+  var berryBushes = [];
+  var bbi; guard = 0;
+  var bbCount = 0;
+  while (bbCount < 9 && guard < 1500) {
+    guard++;
+    var bx2 = (rng() - 0.5) * 140, bz2 = (rng() - 0.5) * 140;
+    if (!goodSpot(bx2, bz2, 12)) continue;
+    var by2 = getHeight(bx2, bz2);
+    var bush = new THREE.Group();
+    var bushBody = new THREE.Mesh(new THREE.SphereGeometry(0.8, 8, 6),
+      new THREE.MeshLambertMaterial({ color: 0x2E6A2A }));
+    bushBody.position.y = 0.6; bushBody.scale.y = 0.8; bushBody.castShadow = true;
+    bush.add(bushBody);
+    for (bbi = 0; bbi < 7; bbi++) {
+      var berry = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5),
+        new THREE.MeshPhongMaterial({ color: 0xD8483A, emissive: 0x2A0505 }));
+      var bba = rng() * 6.28;
+      berry.position.set(Math.cos(bba) * 0.6, 0.5 + rng() * 0.5, Math.sin(bba) * 0.6);
+      bush.add(berry);
+    }
+    bush.position.set(bx2, by2, bz2);
+    scene.add(bush);
+    berryBushes.push({ x: bx2, z: bz2 });
+    bbCount++;
+  }
+
+  function dist2D(ax, az, bx, bz) {
+    var dx = ax - bx, dz = az - bz;
+    return Math.sqrt(dx * dx + dz * dz);
+  }
+
+  function nearestInteract() {
+    var px = player.position.x, pz = player.position.z;
+    var best = null, bestD = 999;
+    var d;
+    if (!state.fallen) {
+      d = dist2D(px, pz, snake.position.x, snake.position.z);
+      if (d < 5 && d < bestD) { bestD = d; best = { label: 'Speak with the Serpent', act: 'snake' }; }
+    }
+    d = dist2D(px, pz, eve.position.x, eve.position.z);
+    if (d < 4 && d < bestD) { bestD = d; best = { label: 'Speak with Eve', act: 'eve' }; }
+    if (!state.fallen) {
+      d = dist2D(px, pz, KNOW_POS.x, KNOW_POS.z);
+      if (d < 7 && d < bestD) { bestD = d; best = { label: 'Reach for the forbidden fruit', act: 'know' }; }
+      d = dist2D(px, pz, LIFE_POS.x, LIFE_POS.z);
+      if (d < 7 && d < bestD) { bestD = d; best = { label: 'Reach for the golden fruit', act: 'life' }; }
+    }
+    var bb;
+    for (bb = 0; bb < berryBushes.length; bb++) {
+      d = dist2D(px, pz, berryBushes[bb].x, berryBushes[bb].z);
+      if (d < 2.5 && d < bestD) { bestD = d; best = { label: 'Eat of the garden', act: 'berry' }; }
+    }
+    if (Math.abs(px - riverX(pz)) < 8 && bestD > 900) {
+      best = { label: 'Drink from the river', act: 'river' };
+    }
+    return best;
+  }
+
+  function doInteract(act) {
+    if (act === 'snake') {
+      showDialog('The Serpent', LINES.snakeTalk);
+    } else if (act === 'eve') {
+      eve.lookAt(player.position.x, eve.position.y + 1.5, player.position.z);
+      showDialog('Eve', state.fallen ? LINES.eveFallen : LINES.evePeace);
+    } else if (act === 'berry') {
+      chime();
+      showDialog('Eden', LINES.berry);
+    } else if (act === 'river') {
+      chime();
+      showDialog('Eden', LINES.river);
+    } else if (act === 'know') {
+      state.fallSource = 'know';
+      showDialog('The Tree of Knowledge', LINES.knowWarn.concat(LINES.takeKnow), null, 'choice');
+    } else if (act === 'life') {
+      state.fallSource = 'life';
+      showDialog('The Tree of Life', LINES.lifeWarn.concat(LINES.takeLife), null, 'choice');
+    }
+  }
+
+  // ============ THE FALL ============
+  function triggerFall() {
+    if (state.fallen) return;
+    state.fallen = true;
+    state.fallActive = true;
+    state.fallT = 0;
+    // pluck one low fruit from the chosen tree
+    var tree = (state.fallSource === 'life') ? treeLife : treeKnow;
+    var fruits = tree.userData.fruits;
+    if (fruits.length > 0) {
+      var f = fruits.pop();
+      tree.remove(f);
+    }
+    stopPeaceful();
+    startOminous();
+    thunder(900);
+    el.vignette.style.opacity = 1;
+    state.mode = 'cinematic';
+    state.godPhase = 1;       // 1 = storm building, 2 = descent, 3 = speaking, 4 = done
+    state.godTimer = 0;
+  }
+
+  function applyFallVisual(t) {
+    drawSky(t);
+    scene.fog.color.setHex(0xC9E4EE).lerp(new THREE.Color(0x3A3038), t);
+    scene.fog.near = 70 - 45 * t;
+    scene.fog.far = 300 - 155 * t;
+    hemi.intensity = 0.85 - 0.58 * t;
+    sun.intensity = 1.15 - 0.85 * t;
+    sun.color.setHex(0xFFF4D6).lerp(new THREE.Color(0x8899BB), t);
+    waterMat.color.setHex(0x3E90B8).lerp(new THREE.Color(0x263238), t);
+    terrMat.color.setRGB(1, 1, 1).lerp(new THREE.Color(0.55, 0.5, 0.52), t);
+    motes.material.opacity = 0.85 * (1 - t);
+    sunMesh.visible = t < 0.4;
+    if (treeLife.userData.light) treeLife.userData.light.intensity = 1.1 * (1 - t * 0.7);
+    if (t > 0.5 && !rain.visible) rain.visible = true;
+    if (t > 0.5) {
+      snake.scale.set(1 - (t - 0.5) * 2, 1 - (t - 0.5) * 2, 1 - (t - 0.5) * 2); // the serpent slips away
+      if (t >= 0.99) snake.visible = false;
+    }
+    var bfj;
+    for (bfj = 0; bfj < butterflies.length; bfj++) butterflies[bfj].g.visible = t < 0.5;
+  }
+
+  function lightningStrike() {
+    el.flash.style.transition = 'opacity 0.05s';
+    el.flash.style.opacity = 0.5;
+    setTimeout(function () {
+      el.flash.style.transition = 'opacity 0.5s';
+      el.flash.style.opacity = 0;
+    }, 90);
+    thunder(400 + Math.random() * 1200);
+  }
+
+  function startGodDialog() {
+    var lines = (state.fallSource === 'life') ? LINES.godLife : LINES.godKnow;
+    godChord();
+    showDialog('The LORD God', lines, function () {
+      state.mode = 'cinematic';
+      state.godPhase = 4;
+      state.godTimer = 0;
+    });
+    state.mode = 'dialog'; // allow advancing lines; movement stays locked below
+  }
+
+  function showEnd() {
+    state.mode = 'end';
+    el.endScreen.style.display = 'flex';
+    setTimeout(function () {
+      el.endScreen.style.background = 'rgba(0,0,0,0.93)';
+      el.endVerse.textContent = 'Therefore the LORD God sent him forth from the garden of Eden, to till the ground from whence he was taken... and He placed at the east of the garden Cherubims, and a flaming sword which turned every way, to keep the way of the tree of life.';
+      el.endRef.textContent = 'GENESIS 3:23-24';
+      setTimeout(function () {
+        el.endVerse.style.opacity = 1;
+        el.endRef.style.opacity = 1;
+        el.restartBtn.style.opacity = 1;
+      }, 600);
+    }, 60);
+  }
+
+  // ============ INPUT ============
+  function isDialogKey(k) { return k === 'i' || k === 'enter'; }
+
+  window.addEventListener('keydown', function (e) {
+    var k = e.key.toLowerCase();
+    if (k === ' ' || k.indexOf('arrow') === 0) e.preventDefault();
+    keys[k] = true;
+    if (k === ' ') keys.space = true;
+    if (!state.started) { enterGarden(); return; }
+
+    if (state.mode === 'dialog') {
+      if (isDialogKey(k)) advanceDialog();
+      return;
+    }
+    if (state.mode === 'choice') {
+      if (dlg.idx < dlg.lines.length - 1) {
+        if (isDialogKey(k)) advanceDialog();
+      } else {
+        if (k === 'y') {
+          el.dialog.style.display = 'none';
+          triggerFall();
+        } else if (k === 'n' || isDialogKey(k)) {
+          el.dialog.style.display = 'none';
+          state.mode = 'roam';
+        }
+      }
+      return;
+    }
+    if (state.mode !== 'roam') return;
+
+    if (k === 'v') {
+      state.pov = (state.pov === 3) ? 1 : 3;
+      el.povTag.textContent = (state.pov === 3) ? 'THIRD PERSON' : 'FIRST PERSON';
+      player.visible = (state.pov === 3);
+    }
+    if (k === 'i') {
+      var it = nearestInteract();
+      if (it) doInteract(it.act);
+    }
+  });
+  window.addEventListener('keyup', function (e) {
+    var k = e.key.toLowerCase();
+    keys[k] = false;
+    if (k === ' ') keys.space = false;
+  });
+
+  // drag look (mouse + touch via pointer events)
+  var dragging = false, lastX = 0, lastY = 0;
+  canvas.addEventListener('pointerdown', function (e) {
+    if (!state.started) { enterGarden(); return; }
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+  });
+  window.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    yaw -= (e.clientX - lastX) * 0.0045;
+    pitch -= (e.clientY - lastY) * 0.0035;
+    if (pitch > 1.2) pitch = 1.2;
+    if (pitch < -1.1) pitch = -1.1;
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  window.addEventListener('pointerup', function () { dragging = false; });
+
+  document.getElementById('startScreen').addEventListener('click', function () { enterGarden(); });
+
+  function enterGarden() {
+    if (state.started) return;
+    state.started = true;
+    ensureAudio();
+    if (AC && AC.state === 'suspended') AC.resume();
+    el.start.style.display = 'none';
+  }
+
+  // ============ MOVEMENT & CAMERA ============
+  function moveVec() {
+    var f = 0, s = 0;
+    if (keys.w || keys.arrowup) f += 1;
+    if (keys.s || keys.arrowdown) f -= 1;
+    if (keys.a || keys.arrowleft) s += 1;
+    if (keys.d || keys.arrowright) s -= 1;
+    return { f: f, s: s };
+  }
+
+  function collide(px, pz) {
+    var i, out = { x: px, z: pz };
+    for (i = 0; i < treeColliders.length; i++) {
+      var c = treeColliders[i];
+      var dx = out.x - c.x, dz = out.z - c.z;
+      var d = Math.sqrt(dx * dx + dz * dz);
+      var min = c.r + 0.35;
+      if (d < min && d > 0.0001) {
+        out.x = c.x + (dx / d) * min;
+        out.z = c.z + (dz / d) * min;
+      }
+    }
+    var rr = Math.sqrt(out.x * out.x + out.z * out.z);
+    if (rr > 100) { out.x *= 100 / rr; out.z *= 100 / rr; }
+    return out;
+  }
+
+  var GRAV = -22;
+  function updatePlayer(dt) {
+    var locked = (state.mode !== 'roam');
+    var mv = locked ? { f: 0, s: 0 } : moveVec();
+    var running = keys.shift ? 1.9 : 1;
+    var speed = 4.2 * running;
+    var mag = Math.sqrt(mv.f * mv.f + mv.s * mv.s);
+    var vx = 0, vz = 0;
+    if (mag > 0) {
+      var nf = mv.f / mag, ns = mv.s / mag;
+      vx = (Math.sin(yaw) * nf + Math.cos(yaw) * ns) * speed;
+      vz = (Math.cos(yaw) * nf - Math.sin(yaw) * ns) * speed;
+      player.rotation.y = Math.atan2(vx, vz);
+    }
+    var np = collide(player.position.x + vx * dt, player.position.z + vz * dt);
+    player.position.x = np.x;
+    player.position.z = np.z;
+
+    var gy = getHeight(player.position.x, player.position.z);
+    if (gy < WATER_Y - 0.4) gy = WATER_Y - 0.4; // wade, don't sink
+    if (!locked && keys.space && onGround) { pvel.y = 8.2; onGround = false; }
+    pvel.y += GRAV * dt;
+    player.position.y += pvel.y * dt;
+    if (player.position.y <= gy) {
+      player.position.y = gy;
+      pvel.y = 0;
+      onGround = true;
+    }
+    animHuman(player, onGround ? mag * speed : 2, dt);
+  }
+
+  var camPos = new THREE.Vector3(SPAWN.x, 4, SPAWN.z + 8);
+  function updateCamera(dt) {
+    var headY = player.position.y + 1.66;
+    if (state.mode === 'cinematic' || (state.mode === 'dialog' && state.godPhase >= 2)) {
+      // frame the confrontation
+      var gp = new THREE.Vector3(god.position.x, god.position.y + 10, god.position.z);
+      var pp = new THREE.Vector3(player.position.x, headY, player.position.z);
+      var back = new THREE.Vector3().subVectors(pp, gp);
+      back.y = 0; back.normalize();
+      var want = new THREE.Vector3(
+        pp.x + back.x * 7 + 3, headY + 3.5, pp.z + back.z * 7 + 3);
+      camPos.lerp(want, 1 - Math.pow(0.001, dt));
+      camera.position.copy(camPos);
+      camera.lookAt(gp.x, gp.y - 2, gp.z);
+      return;
+    }
+    if (state.pov === 1) {
+      camera.position.set(player.position.x, headY, player.position.z);
+      var dir1 = new THREE.Vector3(
+        Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      camera.lookAt(camera.position.x + dir1.x, camera.position.y + dir1.y, camera.position.z + dir1.z);
+      camPos.copy(camera.position);
+    } else {
+      var dir3 = new THREE.Vector3(
+        Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      var want3 = new THREE.Vector3(
+        player.position.x - dir3.x * 5.6,
+        headY - dir3.y * 5.6 + 0.9,
+        player.position.z - dir3.z * 5.6);
+      var groundCam = getHeight(want3.x, want3.z) + 0.5;
+      if (want3.y < groundCam) want3.y = groundCam;
+      camPos.lerp(want3, 1 - Math.pow(0.0001, dt));
+      camera.position.copy(camPos);
+      camera.lookAt(player.position.x + dir3.x * 3, headY + dir3.y * 3, player.position.z + dir3.z * 3);
+    }
+  }
+
+  // ============ NPC / AMBIENT UPDATES ============
+  function updateEve(dt) {
+    if (state.mode !== 'roam' && state.mode !== 'dialog') { animHuman(eve, 0, dt); return; }
+    var d = dist2D(eve.position.x, eve.position.z, eveTarget.x, eveTarget.z);
+    var dp = dist2D(eve.position.x, eve.position.z, player.position.x, player.position.z);
+    if (dp < 5) {
+      eve.lookAt(player.position.x, eve.position.y + 1.5, player.position.z);
+      animHuman(eve, 0, dt);
+      return;
+    }
+    if (d < 0.5) {
+      eveWait -= dt;
+      if (eveWait <= 0) {
+        var wa = rng() * 6.28, wr = 4 + rng() * 8;
+        eveTarget.x = LIFE_POS.x + Math.cos(wa) * wr + 5;
+        eveTarget.z = LIFE_POS.z + Math.sin(wa) * wr + 5;
+        eveWait = 3 + rng() * 5;
+      }
+      animHuman(eve, 0, dt);
+    } else {
+      var mx = (eveTarget.x - eve.position.x) / d, mz = (eveTarget.z - eve.position.z) / d;
+      var es = state.fallen ? 0 : 1.1;
+      eve.position.x += mx * es * dt;
+      eve.position.z += mz * es * dt;
+      eve.position.y = getHeight(eve.position.x, eve.position.z);
+      eve.rotation.y = Math.atan2(mx, mz);
+      animHuman(eve, es, dt);
+    }
+  }
+
+  function updateAmbient(time, dt) {
+    // butterflies
+    var i;
+    if (!state.fallen) {
+      for (i = 0; i < butterflies.length; i++) {
+        var b = butterflies[i];
+        b.t += dt;
+        b.a += (noise2(b.t * 0.3, i * 7) - 0.5) * dt * 3;
+        b.g.position.x += Math.sin(b.a) * dt * 1.6;
+        b.g.position.z += Math.cos(b.a) * dt * 1.6;
+        var gy2 = getHeight(b.g.position.x, b.g.position.z);
+        b.g.position.y = gy2 + 1.6 + Math.sin(b.t * 1.7) * 0.5;
+        var flap = Math.sin(b.t * 22) * 1.1;
+        b.wL.rotation.y = flap;
+        b.wR.rotation.y = -flap;
+      }
+      // life-tree motes drift upward
+      var mp = motes.geometry.attributes.position;
+      for (i = 0; i < mp.count; i++) {
+        var my = mp.getY(i) + dt * 0.5;
+        if (my > getHeight(LIFE_POS.x, LIFE_POS.z) + 15) my = getHeight(LIFE_POS.x, LIFE_POS.z);
+        mp.setY(i, my);
+      }
+      mp.needsUpdate = true;
+    }
+    // water bob
+    water.position.y = WATER_Y + Math.sin(time * 0.8) * 0.06;
+    // rain follows player
+    if (rain.visible) {
+      rain.position.x = player.position.x;
+      rain.position.z = player.position.z;
+      var rp = rain.geometry.attributes.position;
+      for (i = 0; i < rp.count; i++) {
+        var ry = rp.getY(i) - dt * 26;
+        if (ry < 0) ry = 40;
+        rp.setY(i, ry);
+      }
+      rp.needsUpdate = true;
+    }
+    // lightning
+    if (state.fallen && state.fallT >= 1) {
+      state.lightningTimer -= dt;
+      if (state.lightningTimer <= 0) {
+        lightningStrike();
+        state.lightningTimer = 4 + Math.random() * 7;
+      }
+    }
+  }
+
+  function updateGod(dt, time) {
+    if (!state.fallen) return;
+    state.godTimer += dt;
+    if (state.godPhase === 1 && state.fallT >= 1 && state.godTimer > 6) {
+      // begin descent
+      state.godPhase = 2;
+      state.godTimer = 0;
+      god.visible = true;
+      god.position.set(player.position.x + 6, player.position.y + 95, player.position.z - 14);
+      beam.material.opacity = 0.12;
+      thunder(200);
+    } else if (state.godPhase === 2) {
+      var t = Math.min(state.godTimer / 7, 1);
+      var ease = 1 - Math.pow(1 - t, 3);
+      var targetY = getHeight(god.position.x, god.position.z) + 6;
+      god.position.y = (player.position.y + 95) + (targetY - (player.position.y + 95)) * ease;
+      godLight.intensity = 3.5 * t;
+      if (t >= 1) {
+        state.godPhase = 3;
+        state.godTimer = 0;
+        startGodDialog();
+      }
+    } else if (state.godPhase >= 2) {
+      god.position.y += Math.sin(time * 1.1) * 0.008;
+      halo.rotation.z += dt * 0.8;
+      aura.rotation.y += dt * 0.25;
+      if (state.godPhase === 4 && state.godTimer > 2.5) {
+        state.godPhase = 5;
+        showEnd();
+      }
+    }
+  }
+
+  // ============ FALL TRANSITION DRIVER ============
+  var skyRedrawAcc = 0;
+  function updateFall(dt) {
+    if (!state.fallActive) return;
+    state.fallT += dt / 6;
+    if (state.fallT >= 1) { state.fallT = 1; state.fallActive = false; }
+    skyRedrawAcc += dt;
+    if (skyRedrawAcc > 0.12 || state.fallT >= 1) {
+      skyRedrawAcc = 0;
+      applyFallVisual(state.fallT);
+    }
+  }
+
+  // ============ PROMPT ============
+  var promptAcc = 0;
+  function updatePrompt(dt) {
+    promptAcc += dt;
+    if (promptAcc < 0.2) return;
+    promptAcc = 0;
+    if (state.mode !== 'roam') { el.prompt.style.opacity = 0; return; }
+    var it = nearestInteract();
+    if (it) {
+      el.promptText.textContent = 'Press  I  -  ' + it.label;
+      el.prompt.style.opacity = 1;
+    } else {
+      el.prompt.style.opacity = 0;
+    }
+    // serpent whispers as you first draw near
+    if (!state.snakeIntroDone && !state.fallen &&
+        dist2D(player.position.x, player.position.z, snake.position.x, snake.position.z) < 9) {
+      state.snakeIntroDone = true;
+      showDialog('The Serpent', LINES.snakeIntro);
+    }
+  }
+
+  // ============ MAIN LOOP ============
+  var clock = new THREE.Clock();
+  function loop() {
+    requestAnimationFrame(loop);
+    var dt = Math.min(clock.getDelta(), 0.05);
+    var time = clock.elapsedTime;
+    if (state.started) {
+      updatePlayer(dt);
+      updateEve(dt);
+      if (snake.visible && !state.fallen) animSnake(time);
+      updateAmbient(time, dt);
+      updateFall(dt);
+      updateGod(dt, time);
+      updatePrompt(dt);
+      // gentle fruit shimmer
+      treeLife.rotation.y = Math.sin(time * 0.05) * 0.01;
+    }
+    updateCamera(dt);
+    renderer.render(scene, camera);
+  }
+  loop();
+
+})();
+</script>
+</body>
+</html>
