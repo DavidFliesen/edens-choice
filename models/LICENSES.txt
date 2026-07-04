@@ -1,0 +1,17 @@
+Eden's Choice — bundled 3D models
+
+All models are used under CC0 (public domain dedication) — free for
+personal and commercial use, no attribution required. Credits given
+here out of appreciation:
+
+Barbarian.glb, Rogue.glb
+  KayKit Character Pack: Adventurers by Kay Lousberg (kaylousberg.com)
+  https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0
+  License: CC0
+
+CommonTree_1.glb, CommonTree_3.glb, Willow_1.glb,
+Deer.glb, Stag.glb, Fox.glb
+  Quaternius Nature Pack / Animals Pack (quaternius.com)
+  License: CC0
+
+Place this entire models/ folder in the repo root, next to index.html.
