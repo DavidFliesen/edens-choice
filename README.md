@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="edens-choice-logo.jpg" width="440" alt="Eden's Choice — a tree crowned with a golden apple, a serpent coiled about its trunk">
+<img src="images/edens-choice-logo.png" width="440" alt="Eden's Choice — a tree crowned with a golden apple, a serpent coiled about its trunk">
 
 # Eden's Choice
 
